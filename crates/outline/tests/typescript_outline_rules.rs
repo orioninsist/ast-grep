@@ -187,3 +187,75 @@ export interface Parser {
 "#,
   );
 }
+
+#[test]
+fn extracts_decorated_typescript_signatures_from_declaration_lines() {
+  common::assert_outline_signature_snapshot(
+    SupportLang::TypeScript,
+    TYPESCRIPT_RULES,
+    r#"
+@Injectable()
+export class Foo implements Bar {
+  @ApiProperty()
+  email: string;
+}
+"#,
+    r#"
+- Class item exported Foo | export class Foo implements Bar {
+  - Field public email | email: string
+"#,
+  );
+}
+
+#[test]
+fn extracts_typescript_namespaces_as_standalone_items() {
+  common::assert_outline_snapshot(
+    SupportLang::TypeScript,
+    TYPESCRIPT_RULES,
+    r#"
+export namespace PublicApi {
+  export interface Options {}
+  export function create() {}
+}
+
+namespace Local.Tools {
+  export class Helper {}
+}
+
+declare namespace AmbientApi {
+  export interface Client {}
+}
+
+export declare namespace ExportedAmbientApi {
+  export type Result = string;
+}
+"#,
+    r#"
+- Module item exported PublicApi
+- Module item private Local.Tools
+- Module item exported AmbientApi
+- Module item exported ExportedAmbientApi
+"#,
+  );
+}
+
+#[test]
+fn extracts_typescript_ambient_modules_as_standalone_items() {
+  common::assert_outline_snapshot(
+    SupportLang::TypeScript,
+    TYPESCRIPT_RULES,
+    r#"
+declare module "plain-package" {
+  export interface Resource {}
+}
+
+export declare module "exported-package" {
+  export type API = string;
+}
+"#,
+    r#"
+- Module item exported plain-package
+- Module item exported exported-package
+"#,
+  );
+}

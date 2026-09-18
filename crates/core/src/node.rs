@@ -153,6 +153,9 @@ impl<'r, D: Doc> Node<'r, D> {
   pub fn is_missing(&self) -> bool {
     self.inner.is_missing()
   }
+  pub fn is_extra(&self) -> bool {
+    self.inner.is_extra()
+  }
 
   /// byte offsets of start and end.
   pub fn range(&self) -> std::ops::Range<usize> {
@@ -225,6 +228,13 @@ impl<'r, D: Doc> Node<'r, D> {
 
   pub fn children(&self) -> impl ExactSizeIterator<Item = Node<'r, D>> + '_ {
     self.inner.children().map(|inner| Node {
+      inner,
+      root: self.root,
+    })
+  }
+
+  pub fn named_children(&self) -> impl Iterator<Item = Node<'r, D>> + '_ {
+    self.inner.named_children().map(|inner| Node {
       inner,
       root: self.root,
     })

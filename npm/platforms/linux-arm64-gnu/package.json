@@ -1,6 +1,6 @@
 {
   "name": "@ast-grep/cli-linux-arm64-gnu",
-  "version": "0.44.1",
+  "version": "0.45.3",
   "os": [
     "linux"
   ],
@@ -11,7 +11,8 @@
     "glibc"
   ],
   "files": [
-    "ast-grep"
+    "ast-grep",
+    "sg"
   ],
   "description": "Search and Rewrite code at large scale using precise AST pattern",
   "keywords": [

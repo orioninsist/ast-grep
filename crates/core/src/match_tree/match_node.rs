@@ -5,6 +5,25 @@ use crate::meta_var::MetaVariable;
 use crate::{Doc, Node};
 use std::iter::Peekable;
 
+pub(super) fn match_root_node_impl<'tree, D: Doc>(
+  goal: &PatternNode,
+  candidate: &Node<'tree, D>,
+  agg: &mut impl Aggregator<'tree, D>,
+  strictness: &MatchStrictness,
+) -> MatchOneNode {
+  // Smart matching ignores comments inside structured patterns, but a root
+  // metavariable represents the candidate itself and must still bind extras.
+  if let PatternNode::MetaVar { meta_var } = goal
+    && matches!(strictness, MatchStrictness::Smart)
+  {
+    return match agg.match_meta_var(meta_var, candidate) {
+      Some(()) => MatchOneNode::MatchedBoth,
+      None => MatchOneNode::NoMatch,
+    };
+  }
+  match_node_impl(goal, candidate, agg, strictness)
+}
+
 pub(super) fn match_node_impl<'tree, D: Doc>(
   goal: &PatternNode,
   candidate: &Node<'tree, D>,
@@ -278,6 +297,12 @@ mod test {
     );
   }
   use MatchStrictness as M;
+
+  #[test]
+  fn test_smart_match() {
+    // smart now ignores comments by default
+    matched("$A($B)", "foo(/* before */ bar /* after */)", M::Smart);
+  }
 
   #[test]
   fn test_ast_match() {

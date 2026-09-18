@@ -34,6 +34,32 @@ rule:
   pattern: Some($A)
 ";
 
+const SEVERITY_RULES: &str = "
+id: hint-rule
+message: hint rule
+severity: hint
+language: TypeScript
+rule: { pattern: Some($A) }
+---
+id: info-rule
+message: info rule
+severity: info
+language: TypeScript
+rule: { pattern: Some($A) }
+---
+id: warning-rule
+message: warning rule
+severity: warning
+language: TypeScript
+rule: { pattern: Some($A) }
+---
+id: error-rule
+message: error rule
+severity: error
+language: TypeScript
+rule: { pattern: Some($A) }
+";
+
 const FIXABLE_JS_RULE: &str = "
 id: no-var
 message: use let
@@ -300,6 +326,108 @@ fn test_severity_override() -> Result<()> {
 }
 
 #[test]
+fn test_severity_threshold_filters_output_and_rule_tally() -> Result<()> {
+  let dir = create_test_files([
+    ("sgconfig.yml", CONFIG),
+    ("rules/severity.yml", SEVERITY_RULES),
+    ("test.ts", "Some(123)"),
+  ])?;
+  Command::new(cargo_bin!())
+    .current_dir(dir.path())
+    .args([
+      "scan",
+      "--min-severity",
+      "warning",
+      "--color=never",
+      "--report-style=short",
+      "--inspect=summary",
+    ])
+    .assert()
+    .failure()
+    .stdout(contains("error-rule"))
+    .stdout(contains("warning-rule"))
+    .stdout(contains("info-rule").not())
+    .stdout(contains("hint-rule").not())
+    .stderr(contains("effectiveRuleCount=2,skippedRuleCount=2"))
+    .stderr(contains("1 error(s) found in code"));
+  Ok(())
+}
+
+#[test]
+fn test_severity_threshold_uses_overwritten_severity() -> Result<()> {
+  let dir = create_test_files([
+    ("sgconfig.yml", CONFIG),
+    ("rules/severity.yml", SEVERITY_RULES),
+    ("test.ts", "Some(123)"),
+  ])?;
+
+  Command::new(cargo_bin!())
+    .current_dir(dir.path())
+    .args([
+      "scan",
+      "--min-severity=error",
+      "--warning=error-rule",
+      "--json=compact",
+    ])
+    .assert()
+    .success()
+    .stdout(contains("error-rule").not());
+  Ok(())
+}
+
+#[test]
+fn test_min_severity_filters_all_stdin_rules() -> Result<()> {
+  let inline_rule =
+    "{id: hint-rule, severity: hint, language: ts, rule: {pattern: console.log($A)}}";
+  Command::new(cargo_bin!())
+    .args([
+      "scan",
+      "--stdin",
+      "--min-severity=warning",
+      "--inline-rules",
+      inline_rule,
+      "--json=compact",
+    ])
+    .write_stdin("console.log(123)")
+    .assert()
+    .success()
+    .stdout(predicate::eq("[]\n"));
+  Ok(())
+}
+
+#[test]
+fn test_min_severity_filters_builtin_rules() -> Result<()> {
+  let unused = create_test_files([
+    ("sgconfig.yml", CONFIG),
+    ("rules/rule.yml", RULE1),
+    ("test.ts", "None(123) // ast-grep-ignore"),
+  ])?;
+  Command::new(cargo_bin!())
+    .current_dir(unused.path())
+    .args([
+      "scan",
+      "--min-severity=warning",
+      "--hint=unused-suppression",
+    ])
+    .assert()
+    .success()
+    .stdout(contains("unused-suppression").not());
+
+  let suppress_all = create_test_files([
+    ("sgconfig.yml", CONFIG),
+    ("rules/rule.yml", RULE1),
+    ("test.ts", "Some(123) // ast-grep-ignore"),
+  ])?;
+  Command::new(cargo_bin!())
+    .current_dir(suppress_all.path())
+    .args(["scan", "--min-severity=error", "--warning=no-suppress-all"])
+    .assert()
+    .success()
+    .stdout(contains("no-suppress-all").not());
+  Ok(())
+}
+
+#[test]
 fn test_severity_override_with_rule_path() -> Result<()> {
   let dir = setup()?;
   Command::new(cargo_bin!())
@@ -548,6 +676,36 @@ fn test_yaml_sgconfig_extension() -> Result<()> {
     .args(["scan"])
     .assert()
     .success();
+  Ok(())
+}
+
+#[test]
+fn test_rule_dir_ignores_parent_gitignore() -> Result<()> {
+  let dir = TempDir::new()?;
+  let venv = dir.path().join(".venv");
+  let rules = venv.join("rules");
+  let src = dir.path().join("src");
+  std::fs::create_dir(dir.path().join(".git"))?;
+  std::fs::create_dir_all(&rules)?;
+  std::fs::create_dir_all(&src)?;
+  std::fs::write(venv.join(".gitignore"), "*\n")?;
+  std::fs::write(venv.join("sgconfig.yml"), "ruleDirs:\n- rules\n")?;
+  std::fs::write(rules.join("no-print.yml"), UNFIXABLE_JS_RULE)?;
+  std::fs::write(src.join("example.js"), "console.log('hello')\n")?;
+
+  Command::new(cargo_bin!())
+    .current_dir(dir.path())
+    .args([
+      "scan",
+      "--config",
+      ".venv/sgconfig.yml",
+      "--color",
+      "never",
+      "src",
+    ])
+    .assert()
+    .success()
+    .stdout(contains("no-console"));
   Ok(())
 }
 

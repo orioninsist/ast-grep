@@ -11,7 +11,7 @@ use codespan_reporting::term::termcolor::{Buffer, ColorChoice, StandardStream, W
 use codespan_reporting::term::{self, DisplayStyle};
 
 use std::borrow::Cow;
-use std::io::Write;
+use std::io::{IsTerminal as _, Write};
 use std::path::Path;
 
 mod markdown;
@@ -50,7 +50,7 @@ impl Heading {
     match self {
       H::Always => true,
       H::Never => false,
-      H::Auto => atty::is(atty::Stream::Stdout),
+      H::Auto => std::io::stdout().is_terminal(),
     }
   }
 }
@@ -316,7 +316,7 @@ fn print_rule_title<W: WriteColor>(
     Severity::Hint => ("help", style.hint),
     Severity::Off => unreachable!("turned-off rule should not have match."),
   };
-  let header = format!("{level}[{}]:", &rule.id);
+  let header = format!("{level}[{}]:", rule.id);
   let header = level_style.paint(header);
   let message = style.message.paint(rule.get_message(nm));
   writeln!(writer, "{header} {message}")?;

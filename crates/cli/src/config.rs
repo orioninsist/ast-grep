@@ -103,7 +103,7 @@ impl ProjectConfig {
       custom_language_outline_rules(&project_dir, sg_config.custom_languages.as_ref());
     let config = ProjectConfig {
       project_dir,
-      rule_dirs: sg_config.rule_dirs.drain(..).collect(),
+      rule_dirs: std::mem::take(&mut sg_config.rule_dirs),
       outline_rules,
       test_configs: sg_config.test_configs.take(),
       util_dirs: sg_config.util_dirs.take(),
@@ -144,6 +144,9 @@ fn build_util_walker(base_dir: &Path, util_dirs: &Option<Vec<PathBuf>>) -> Optio
   for dir in util_dirs {
     walker.add(base_dir.join(dir));
   }
+  // Configured directories are explicit inputs, so ignore files outside of
+  // them must not prevent their contents from being discovered.
+  walker.parents(false);
   Some(walker)
 }
 
@@ -192,6 +195,7 @@ fn read_directory_yaml(
   for dir in rule_dirs {
     let dir_path = project_dir.join(dir);
     let walker = WalkBuilder::new(&dir_path)
+      .parents(false)
       .types(config_file_type())
       .build();
     for dir in walker {
